@@ -1,0 +1,22 @@
+class BACKTESTER:
+    def __init__(self, FROM_DATE, TO_DATE, START_TIME, END_TIME, UNDERLYING_SYMBOL, TRADE_OPTION, LOT_SIZE, NO_OF_LEGS, LEGS, STRATEGY_LVL_TARGET, STRATEGY_LVL_SL):
+        self.FROM_DATE = FROM_DATE
+        self.TO_DATE = TO_DATE 
+        self.START_TIME = START_TIME
+        self.END_TIME = END_TIME
+        self.UNDERLYING_SYMBOL = UNDERLYING_SYMBOL
+        self.TRADE_OPTION = TRADE_OPTION
+        self.LOT_SIZE = LOT_SIZE
+        self.NO_OF_LEGS = NO_OF_LEGS
+        self.LEGS = LEGS
+        self.STRATEGY_LVL_TARGET = STRATEGY_LVL_TARGET
+        self.STRATEGY_LVL_SL = STRATEGY_LVL_SL
+
+        
+  
+
+
+
+
+
+    

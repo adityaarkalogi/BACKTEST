@@ -1,0 +1,22 @@
+
+DATA_PATH = r'D:\ADITYA\DATA\2023'
+HOLIDAY_DATA_PATH = 'D:\ADITYA\DATA\Holidays'
+
+QTY = {}
+
+END_DATE = {}
+
+START_DATE = {}
+
+FIRST_ACTION = {}
+
+STRIKE_SHIFTY = {}
+
+MARKET_END_TIME = {}
+
+MARKET_START_TIME = {}
+
+
+
+
+
