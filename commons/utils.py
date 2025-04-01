@@ -67,7 +67,7 @@ def load_data(backtest_config):
                 
                 # ITERATING OVER DATE-TIME
                 while current_time.time() <= end_time.time():
-
+                    LEG_PNL = 0
                     # Adding leg conditions:
                     for leg_key, leg_value in backtest_config.LEGS.items():
 
@@ -82,7 +82,11 @@ def load_data(backtest_config):
                                     (DATASET['Time'] == current_time.time()) 
                                 ]
                         # print(DATA_ROW)
-                        # TO GET TARGET STOPLOSS FOR LEG  
+                        # TO GET TARGET STOPLOSS FOR LEG
+                        
+                        LEG_PNL += int(DATA_ROW['Close'].iloc[0] - DATA_ROW['Open'].iloc[0])
+
+
                         IS_TARGET = leg_value.get('IS_TARGET', False)
                         TARGET = leg_value.get('TARGET', None)
                         IS_STOPLOSS = leg_value.get('IS_STOPLOSS', False)
@@ -91,6 +95,8 @@ def load_data(backtest_config):
                         FINAL_DATA_SET = check_target_and_stoploss(DATA_ROW, IS_TARGET, TARGET, IS_STOPLOSS, STOPLOSS, backtest_config.STRATEGY_LVL_TARGET, backtest_config.STRATEGY_LVL_SL)
 
                         OVERALL_RESULT.extend(FINAL_DATA_SET)
+                    
+                    print(f"LEG_PNL", LEG_PNL)
 
                     current_time += timedelta(minutes=1)
 
