@@ -45,4 +45,27 @@ for i in range(from_date, to_date):
 
 
 
-     
+    ########################################################################################
+
+    for date in date_range:
+        read_data(date_wise)
+        while current_time <= end_time:
+            for leg in leg_list:
+                create_symbol
+                check_target_stoploss
+                
+                if leg tgt or sl hit:
+                    exit leg
+            
+            check_strategy_tgt_sl
+
+            if yes:
+                for leg in leg_list:
+                    exit_all_legs
+
+            increment_time
+            
+day => 2 days i.e. date 10-04-2023,  11-04-2024
+time => 9:15 -> 3:15
+
+

@@ -20,28 +20,25 @@ MONTH_SET={
 
 def load_data(backtest_config):
 
-    OVERALL_RESULT = []
-
     FROM_DATE = backtest_config.FROM_DATE
     TO_DATE = backtest_config.TO_DATE
     START_TIME = datetime.strptime(backtest_config.START_TIME,'%H:%M').time()
     END_TIME = datetime.strptime(backtest_config.END_TIME,'%H:%M').time()
     UNDERLYING = backtest_config.UNDERLYING_SYMBOL
 
-    # UNDERLYING = 'BANKNIFTY'
-
-    FINAL_DATA_SET = []
-
     FROM_DATE = datetime.strptime(FROM_DATE, '%Y-%m-%d').date()
     TO_DATE = datetime.strptime(TO_DATE, '%Y-%m-%d').date()
 
-    # reference_date = datetime.today()
-    
-
     DATA_RANGE = pd.date_range(FROM_DATE, TO_DATE)
+
+    OVERALL_DATA_SET = []
+
+    EXIT_OUTER_LOOOP = False
     
 
     for CURRENT_DATE in DATA_RANGE:
+
+        HIT_LEGS = []
 
         current_time = datetime.combine(CURRENT_DATE, START_TIME)
         end_time = datetime.combine(CURRENT_DATE, END_TIME)
@@ -71,17 +68,22 @@ def load_data(backtest_config):
                     # Adding leg conditions:
                     for leg_key, leg_value in backtest_config.LEGS.items():
 
+                        if any(leg_key in entry for entry in HIT_LEGS):
+                            continue 
+
                         TRADE_OPTION = leg_value.get('TRADEOPTION', 'PE')
                         STRIKE_TYPE = leg_value.get('STRIKE_TYPE','ATM')
 
                         UNDERLYING_SYMBOL = create_symbol(DATASET, START_TIME, UNDERLYING, TRADE_OPTION, STRIKE_TYPE)
 
+                        ENTRY_DATA =  DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)]
+                        
                         # TO GET THE UNDERLYING SYMBOL DATE FROM FROM-DATE TO TO-DATE. 
                         DATA_ROW = DATASET.loc[
                                     (DATASET['Symbol'] == UNDERLYING_SYMBOL) & 
                                     (DATASET['Time'] == current_time.time()) 
                                 ]
-                        # print(DATA_ROW)
+                        
                         # TO GET TARGET STOPLOSS FOR LEG
                         
                         LEG_PNL += int(DATA_ROW['Close'].iloc[0] - DATA_ROW['Open'].iloc[0])
@@ -91,20 +93,82 @@ def load_data(backtest_config):
                         TARGET = leg_value.get('TARGET', None)
                         IS_STOPLOSS = leg_value.get('IS_STOPLOSS', False)
                         STOPLOSS = leg_value.get('STOPLOSS', None)
-        
-                        FINAL_DATA_SET = check_target_and_stoploss(DATA_ROW, IS_TARGET, TARGET, IS_STOPLOSS, STOPLOSS, backtest_config.STRATEGY_LVL_TARGET, backtest_config.STRATEGY_LVL_SL)
+                        
+                        is_target_hit, is_stoploss_hit = check_target_and_stoploss(DATA_ROW, IS_TARGET, TARGET, IS_STOPLOSS, STOPLOSS, ENTRY_DATA)
+                        if is_target_hit:
+                            
+                            start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
+                            end_idx = DATASET.loc[(DATASET["Symbol"] == UNDERLYING_SYMBOL) & (DATASET["Time"] == current_time.time())].index
 
-                        OVERALL_RESULT.extend(FINAL_DATA_SET)
+                            FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
+                            HIT_LEGS.append({leg_key: FINAL_DATA})
+                            OVERALL_DATA_SET.append({leg_key: FINAL_DATA})                        
+
+                        elif is_stoploss_hit:
+                            start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
+                            end_idx = DATASET.loc[(DATASET["Symbol"] == UNDERLYING_SYMBOL) & (DATASET["Time"] == current_time.time())].index
+
+                            FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
+                            HIT_LEGS.append({leg_key: FINAL_DATA})
+                            OVERALL_DATA_SET.append({leg_key: FINAL_DATA}) 
+
+                        elif current_time.time() == end_time.time():
+                            start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
+                            end_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == current_time.time())].index
+
+                            FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
+                            OVERALL_DATA_SET.append(FINAL_DATA)
                     
-                    print(f"LEG_PNL", LEG_PNL)
+                    OVERALL_LEG_PNL = LEG_PNL * get_lot_number(UNDERLYING, backtest_config.LOT_SIZE)
+                    
+                    if backtest_config.STRATEGY_LVL_TARGET[0] == True:
+                        
+                        if int(backtest_config.STRATEGY_LVL_TARGET[1]) < int(OVERALL_LEG_PNL):
+                            EXIT_OUTER_LOOOP = True
+                            print(f"STRATEGY LVL TARGET HIT: {backtest_config.STRATEGY_LVL_TARGET} : OVERALL_PNL: {OVERALL_LEG_PNL}")
+
+                            for leg_key, leg_value in backtest_config.LEGS.items():
+                                TRADE_OPTION = leg_value.get('TRADEOPTION', 'PE')
+                                STRIKE_TYPE = leg_value.get('STRIKE_TYPE','ATM')
+
+                                UNDERLYING_SYMBOL = create_symbol(DATASET, START_TIME, UNDERLYING, TRADE_OPTION, STRIKE_TYPE)
+                                start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
+                                end_idx = DATASET.loc[(DATASET["Symbol"] == UNDERLYING_SYMBOL) & (DATASET["Time"] == current_time.time())].index
+
+                                FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
+                                OVERALL_DATA_SET.append({leg_key: FINAL_DATA})
+
+                            break 
+                    
+                    if backtest_config.STRATEGY_LVL_SL[0] == True:
+                        
+                        if int(backtest_config.STRATEGY_LVL_SL[1]) > int(OVERALL_LEG_PNL):
+                            EXIT_OUTER_LOOOP = True
+                            print(f"STRATEGY LVL SL HIT: {backtest_config.STRATEGY_LVL_SL} : OVERALL_PNL: {OVERALL_LEG_PNL}")
+
+                            for leg_key, leg_value in backtest_config.LEGS.items():
+                                TRADE_OPTION = leg_value.get('TRADEOPTION', 'PE')
+                                STRIKE_TYPE = leg_value.get('STRIKE_TYPE','ATM')
+
+                                UNDERLYING_SYMBOL = create_symbol(DATASET, START_TIME, UNDERLYING, TRADE_OPTION, STRIKE_TYPE)
+                                start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
+                                end_idx = DATASET.loc[(DATASET["Symbol"] == UNDERLYING_SYMBOL) & (DATASET["Time"] == current_time.time())].index
+
+                                FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
+                                OVERALL_DATA_SET.append({leg_key: FINAL_DATA})
+
+                            break
 
                     current_time += timedelta(minutes=1)
 
+                if EXIT_OUTER_LOOOP == True:
+                    
+                    continue
         else:
             continue
     
-   
-    return OVERALL_RESULT
+    
+    return OVERALL_DATA_SET
 
 def check_holiday(HOLIDAY_YEAR, GIVEN_DATE):
     CHECK_DATE = datetime.strptime(GIVEN_DATE, '%Y-%m-%d').date()
@@ -158,7 +222,7 @@ def create_symbol(DATA_SET, START_TIME, UNDERLYING, TRADE_OPTION, STRIKE_TYPE):
 
     STRIKE_PRICE = strike_type(STRIKE_TYPE, ROUND_OFF_VALUE, UNDERLYING, TRADE_OPTION)
 
-    EXPIRY = (DATA_ROW['WeeklyExpiry'][0].strftime('%d%b%y').upper())
+    EXPIRY = (DATA_ROW['WeeklyExpiry'].iloc[0].strftime('%d%b%y').upper())
 
     UNDERLYING_SYMBOL = fr"{UNDERLYING}{EXPIRY}{STRIKE_PRICE}{TRADE_OPTION}"
 
@@ -185,18 +249,35 @@ def round_off(STRIKE_PRICE, UNDERLYING):
 def generate_result(FINAL_DATA_SET, LOT_SIZE, GET_QTY, TRADE_OPTION):
     FINAL_RESULT = []
 
-    for items in FINAL_DATA_SET:
-        FINAL_RESULT.append({
-            "symbol":items['Symbol'].iloc[0],
-            "date":datetime.strftime(items['Date'].iloc[0],"%Y-%m-%d"),
-            "entry_time":items['Time'].iloc[0].strftime('%I:%M'),
-            "exit_time":items['Time'].iloc[-1].strftime('%I:%M'),
-            "entry_price":float(items['Open'].iloc[0]),
-            "exit_price":float(items['Close'].iloc[-1]),
-            "option_type":TRADE_OPTION,
-            "lot_size":int(LOT_SIZE),
-            "pnl":int(GET_QTY) * (float(items['Close'].iloc[-1] - items['Open'].iloc[0]).__round__(2))
-        })
+    # print(f"Final data set: {(FINAL_DATA_SET)}")
+
+    for var in FINAL_DATA_SET:
+        if type(var) == dict:
+            for key, value in var.items():
+                FINAL_RESULT.append({
+                "symbol":value['Symbol'].iloc[0],
+                "date":datetime.strftime(value['Date'].iloc[0],"%Y-%m-%d"),
+                "entry_time":value['Time'].iloc[0].strftime('%I:%M'),
+                "exit_time":value['Time'].iloc[-1].strftime('%I:%M'),
+                "entry_price":float(value['Open'].iloc[0]),
+                "exit_price":float(value['Close'].iloc[-1]),
+                "option_type":TRADE_OPTION,
+                "lot_size":int(LOT_SIZE),
+                "pnl":int(GET_QTY) * (float(value['Close'].iloc[-1] - value['Open'].iloc[0]).__round__(2))
+            })
+                    
+        else:
+            FINAL_RESULT.append({
+                "symbol":var['Symbol'].iloc[0],
+                "date":datetime.strftime(var['Date'].iloc[0],"%Y-%m-%d"),
+                "entry_time":var['Time'].iloc[0].strftime('%I:%M'),
+                "exit_time":var['Time'].iloc[-1].strftime('%I:%M'),
+                "entry_price":float(var['Open'].iloc[0]),
+                "exit_price":float(var['Close'].iloc[-1]),
+                "option_type":TRADE_OPTION,
+                "lot_size":int(LOT_SIZE),
+                "pnl":int(GET_QTY) * (float(var['Close'].iloc[-1] - var['Open'].iloc[0]).__round__(2))
+            })
 
     PNL_RESULT = json.dumps(FINAL_RESULT)
     return (PNL_RESULT)
@@ -214,61 +295,28 @@ def get_lot_number(UNDERLYING, LOT_SIZE):
     return QTY
 
 
-def check_target_and_stoploss(DATA_SET, IS_TARGET, TARGET_VALUE, IS_STOPLOSS, STOPLOSS_VALUE, STRATEGY_LVL_TG, STRATEGY_LVL_SL):
-    RESULT_SET = []     
-    
+def check_target_and_stoploss(DATA_SET, IS_TARGET, TARGET_VALUE, IS_STOPLOSS, STOPLOSS_VALUE, ENTRY_DATA):
+    HIGH_VALUE =   ENTRY_DATA["High"].values[0]
+    LOW_VALUE =   ENTRY_DATA["Low"].values[0]
+
     if IS_TARGET == False and IS_STOPLOSS == False:
-        return DATA_SET
-
-
-    # for df in DATA_SET:
+        return None, None
 
     TARGET_HIT = False
     STOPLOSS_HIT = False
-    # exit_outer_loop = False
 
-    for index, items in DATA_SET.iterrows():
-        
-        if ((IS_TARGET == True) and (IS_STOPLOSS == False) and (not TARGET_HIT)):
-            if items['High'] >= (float(DATA_SET['High'].iloc[0]) + int(TARGET_VALUE)):
-                RESULT_SET.append(DATA_SET.loc[:index+1])
+    if IS_TARGET:
+        if not TARGET_HIT:
+            if DATA_SET['High'].iloc[0] >= (float(HIGH_VALUE) + int(TARGET_VALUE)):
                 TARGET_HIT = True
-          
-                
-                break
-            
-        if ((IS_STOPLOSS == True) and (IS_TARGET == False) and (not STOPLOSS_HIT)):
-            if items['Low'] <= (float(DATA_SET['Low'].iloc[0]) - int(STOPLOSS_VALUE)):
-                RESULT_SET.append(DATA_SET.loc[:index+1])
+        
+
+    if IS_STOPLOSS:
+        if not STOPLOSS_HIT and (not TARGET_HIT):
+            if DATA_SET['Low'].iloc[0] <= (float(LOW_VALUE) - int(STOPLOSS_VALUE)):
                 STOPLOSS_HIT = True
-               
-                
-                break
-        
-        
-        if ((IS_TARGET == True) and (IS_STOPLOSS == True) and (not TARGET_HIT) and (not STOPLOSS_VALUE)):
-                
-                if items['High'] >= (float(DATA_SET['High'].iloc[0]) + int(TARGET_VALUE)):
-                    RESULT_SET.append(DATA_SET.loc[:index+1])
-                    TARGET_HIT = True
-                   
-                    
-                    break
 
-                if items['Low'] <= (float(DATA_SET['Low'].iloc[0]) - int(STOPLOSS_VALUE)):
-                    RESULT_SET.append(DATA_SET.loc[:index+1])
-                    STOPLOSS_HIT = True
-                   
-                    break
-                
-
-    if not TARGET_HIT and not STOPLOSS_HIT:
-        RESULT_SET.append(DATA_SET)
-    
-
-
-    return RESULT_SET
-
+    return TARGET_HIT, STOPLOSS_HIT
 
 def strike_type(STRIKE_TYPE, ROUND_OFF_VALUE, UNDERLYING, TRADE_OPTION):
 
