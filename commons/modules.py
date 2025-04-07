@@ -5,3 +5,4 @@ import pandas as pd
 from datetime import datetime as datetime
 from datetime import time as time 
 from datetime import timedelta as timedelta
+from datetime import date as date

@@ -3,9 +3,9 @@ from commons.models import BACKTESTER
 
 config = BACKTESTER(
     FROM_DATE = '2023-04-09',
-    TO_DATE = '2023-04-11',
+    TO_DATE = '2023-04-13',
     START_TIME =  '09:30',
-    END_TIME =  '10:15',
+    END_TIME =  '12:15',
     UNDERLYING_SYMBOL =  'BANKNIFTY',
     TRADE_OPTION = 'CE',
     LOT_SIZE = '1',
@@ -13,24 +13,24 @@ config = BACKTESTER(
     LEGS = {
         'L1' : {
             'IS_TARGET': True,
-            'TARGET': 20,
+            'TARGET': 999,
             'IS_STOPLOSS': True,
-            'STOPLOSS': 10,
+            'STOPLOSS': 999,
             'TRADEOPTION':'CE',
             'STRIKE_TYPE': 'OTM-1',
         },
 
         'L2' : {
             'IS_TARGET': True,
-            'TARGET': 5,
+            'TARGET': 999,
             'IS_STOPLOSS': True,
-            'STOPLOSS': 2,
+            'STOPLOSS': 999,
             'TRADEOPTION':'PE',
             'STRIKE_TYPE':'OTM-1',
         },
     },
     
-    STRATEGY_LVL_TARGET = [True, 2000],
+    STRATEGY_LVL_TARGET = [True, 200],
     STRATEGY_LVL_SL = [False, 0]
 )
 

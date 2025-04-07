@@ -1,5 +1,5 @@
 from commons.enums import UnderlyingDataFormat
-from commons.modules import re, os, pd, time, json, datetime, timedelta
+from commons.modules import re, os, pd, time, date, json, datetime, timedelta
 from commons.constants import HOLIDAY_DATA_PATH, DATA_PATH
  
 MONTH_SET={
@@ -18,16 +18,16 @@ MONTH_SET={
 }
 
 
-def load_data(backtest_config):
+def load_data(backtest_config): 
 
-    FROM_DATE = backtest_config.FROM_DATE
     TO_DATE = backtest_config.TO_DATE
-    START_TIME = datetime.strptime(backtest_config.START_TIME,'%H:%M').time()
-    END_TIME = datetime.strptime(backtest_config.END_TIME,'%H:%M').time()
+    FROM_DATE = backtest_config.FROM_DATE
     UNDERLYING = backtest_config.UNDERLYING_SYMBOL
+    END_TIME = parse_time(backtest_config.END_TIME)
+    START_TIME = parse_time(backtest_config.START_TIME)
 
-    FROM_DATE = datetime.strptime(FROM_DATE, '%Y-%m-%d').date()
-    TO_DATE = datetime.strptime(TO_DATE, '%Y-%m-%d').date()
+    FROM_DATE = parse_date(FROM_DATE)
+    TO_DATE = parse_date(TO_DATE)
 
     DATA_RANGE = pd.date_range(FROM_DATE, TO_DATE)
 
@@ -43,11 +43,7 @@ def load_data(backtest_config):
         current_time = datetime.combine(CURRENT_DATE, START_TIME)
         end_time = datetime.combine(CURRENT_DATE, END_TIME)
         
-        FORMATTED_DATE = CURRENT_DATE.strftime('%d%m%Y')
-        MONTH_NUM = CURRENT_DATE.month
-        MONTH = MONTH_SET.get(MONTH_NUM)
-
-        FILE_PATH = fr'{DATA_PATH}\{MONTH}\{UNDERLYING}\{UnderlyingDataFormat.BANKNIFTY.value}{FORMATTED_DATE}.feather'
+        FILE_PATH = get_data_file_path(CURRENT_DATE, UNDERLYING)
        
        
         if os.path.exists(FILE_PATH):
@@ -61,7 +57,8 @@ def load_data(backtest_config):
                 weekly_expiry = (SORTED_EXP_DATES[0]).date()
 
                 DATASET.loc[DATASET['Symbol']=='BANKNIFTY-I', 'WeeklyExpiry'] = weekly_expiry
-                
+
+
                 # ITERATING OVER DATE-TIME
                 while current_time.time() <= end_time.time():
                     LEG_PNL = 0
@@ -85,9 +82,9 @@ def load_data(backtest_config):
                                 ]
                         
                         # TO GET TARGET STOPLOSS FOR LEG
+                        start_index_row = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)]['Open'].iloc[0]
+                        LEG_PNL += int(DATA_ROW['Close'].iloc[0] - start_index_row)
                         
-                        LEG_PNL += int(DATA_ROW['Close'].iloc[0] - DATA_ROW['Open'].iloc[0])
-
 
                         IS_TARGET = leg_value.get('IS_TARGET', False)
                         TARGET = leg_value.get('TARGET', None)
@@ -350,3 +347,31 @@ def strike_type(STRIKE_TYPE, ROUND_OFF_VALUE, UNDERLYING, TRADE_OPTION):
     
     return STRIKE_PRICE
 
+
+
+# CODE REFACTORING
+
+def parse_date(date_str: str):
+    """ Parse date string to Date time object. """
+
+    return datetime.strptime(date_str,'%Y-%m-%d').date()
+
+def parse_time(time_str: str):
+
+    """ Parse time string to Time Object. """
+
+    return datetime.strptime(time_str,'%H:%M').time()
+
+def get_data_file_path(current_date: date, underlying: str) -> str:
+    """ Generate file path for the given date """
+
+    FORMATTED_DATE = current_date.strftime('%d%m%Y')
+    MONTH_NUM = current_date.month
+    MONTH = MONTH_SET.get(MONTH_NUM)
+
+    return os.path.join(
+        DATA_PATH,
+        MONTH,
+        underlying,
+        f"{UnderlyingDataFormat.BANKNIFTY.value}{FORMATTED_DATE}.feather"
+    )
