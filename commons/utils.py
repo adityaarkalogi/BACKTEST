@@ -26,8 +26,8 @@ def load_data(backtest_config):
     END_TIME = parse_time(backtest_config.END_TIME)
     START_TIME = parse_time(backtest_config.START_TIME)
 
+    TO_DATE   = parse_date(TO_DATE)
     FROM_DATE = parse_date(FROM_DATE)
-    TO_DATE = parse_date(TO_DATE)
 
     DATA_RANGE = pd.date_range(FROM_DATE, TO_DATE)
 
@@ -363,7 +363,6 @@ def strike_type(STRIKE_TYPE, ROUND_OFF_VALUE, UNDERLYING, TRADE_OPTION):
         ...
     
     return STRIKE_PRICE
-
 
 
 # CODE REFACTORING
