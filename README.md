@@ -1,4 +1,12 @@
-Run backtest
+################################################# BACKTEST ########################################################
+-> Run backtest
+-> PARAMETER: FROM DATE, TO DATE, ENTRY TIME, EXIT TIME, UNDERLYING SYMBOL, LOTSIZE, LEGS
+-> LEGS: TARGET, STOPLOSS, STRIKE TYPE, TRADE OPTION
+-> LOOP THROUGH DATES -> TIME -> NO OF LEGS
+-> CHECK TARGET STOPLOSS AT LEG LEVEL AND SUMOF THE LEGPNL TO CHECK WITH OVERALL STRATEGY PNL
+-> GENERATE RESULT.
+
+
 
 payload = {
     "start_date": xxx,
@@ -55,3 +63,4 @@ legs = {
 -> if the strategy has  TG/SL  
 
 to get strategy lvl - sl/tg -> if tg is set it will check for the code without the legs and if it goes up it will sq off.
+

@@ -12,10 +12,10 @@ config = BACKTESTER(
     NO_OF_LEGS= '1',
     LEGS = {
         'L1' : {
-            'IS_TARGET': True,
-            'TARGET': 999,
-            'IS_STOPLOSS': True,
-            'STOPLOSS': 999,
+            'IS_TARGET': False,
+            'TARGET': 20,
+            'IS_STOPLOSS': False,
+            'STOPLOSS': 10,
             'TRADEOPTION':'CE',
             'STRIKE_TYPE': 'OTM-1',
         },
@@ -30,8 +30,8 @@ config = BACKTESTER(
         },
     },
     
-    STRATEGY_LVL_TARGET = [True, 200],
-    STRATEGY_LVL_SL = [False, 0]
+    STRATEGY_LVL_TARGET = [False, 1000],
+    STRATEGY_LVL_SL = [True, 1000]
 )
 
 backtest_result = backtest.run_backtest(config)

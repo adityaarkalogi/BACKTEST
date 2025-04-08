@@ -18,7 +18,7 @@ MONTH_SET={
 }
 
 
-def load_data(backtest_config): 
+def load_data(backtest_config):
 
     TO_DATE = backtest_config.TO_DATE
     FROM_DATE = backtest_config.FROM_DATE
@@ -58,8 +58,8 @@ def load_data(backtest_config):
 
                 DATASET.loc[DATASET['Symbol']=='BANKNIFTY-I', 'WeeklyExpiry'] = weekly_expiry
 
-
                 # ITERATING OVER DATE-TIME
+                ARCHIVE_PNL  = 0
                 while current_time.time() <= end_time.time():
                     LEG_PNL = 0
                     # Adding leg conditions:
@@ -81,11 +81,11 @@ def load_data(backtest_config):
                                     (DATASET['Time'] == current_time.time()) 
                                 ]
                         
-                        # TO GET TARGET STOPLOSS FOR LEG
+                        # TO CALCULATE LEG PNL
                         start_index_row = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)]['Open'].iloc[0]
-                        LEG_PNL += int(DATA_ROW['Close'].iloc[0] - start_index_row)
-                        
+                        LEG_PNL += (int(DATA_ROW['Close'].iloc[0] - start_index_row))
 
+                        # TO GET TARGET STOPLOSS FOR LEG
                         IS_TARGET = leg_value.get('IS_TARGET', False)
                         TARGET = leg_value.get('TARGET', None)
                         IS_STOPLOSS = leg_value.get('IS_STOPLOSS', False)
@@ -99,9 +99,12 @@ def load_data(backtest_config):
 
                             FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
                             HIT_LEGS.append({leg_key: FINAL_DATA})
-                            OVERALL_DATA_SET.append({leg_key: FINAL_DATA})                        
+                            OVERALL_DATA_SET.append({leg_key: FINAL_DATA}) 
+
+                            ARCHIVE_PNL += LEG_PNL                       
 
                         elif is_stoploss_hit:
+                            
                             start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
                             end_idx = DATASET.loc[(DATASET["Symbol"] == UNDERLYING_SYMBOL) & (DATASET["Time"] == current_time.time())].index
 
@@ -109,14 +112,19 @@ def load_data(backtest_config):
                             HIT_LEGS.append({leg_key: FINAL_DATA})
                             OVERALL_DATA_SET.append({leg_key: FINAL_DATA}) 
 
+                            ARCHIVE_PNL += LEG_PNL
+
                         elif current_time.time() == end_time.time():
                             start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
                             end_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == current_time.time())].index
 
                             FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
                             OVERALL_DATA_SET.append(FINAL_DATA)
+
+                            ARCHIVE_PNL += LEG_PNL
                     
                     OVERALL_LEG_PNL = LEG_PNL * get_lot_number(UNDERLYING, backtest_config.LOT_SIZE)
+                    OVERALL_LEG_PNL += ARCHIVE_PNL * get_lot_number(UNDERLYING, backtest_config.LOT_SIZE)
                     
                     if backtest_config.STRATEGY_LVL_TARGET[0] == True:
                         
@@ -125,6 +133,10 @@ def load_data(backtest_config):
                             print(f"STRATEGY LVL TARGET HIT: {backtest_config.STRATEGY_LVL_TARGET} : OVERALL_PNL: {OVERALL_LEG_PNL}")
 
                             for leg_key, leg_value in backtest_config.LEGS.items():
+
+                                if any(leg_key in entry for entry in HIT_LEGS):
+                                    continue
+
                                 TRADE_OPTION = leg_value.get('TRADEOPTION', 'PE')
                                 STRIKE_TYPE = leg_value.get('STRIKE_TYPE','ATM')
 
@@ -139,11 +151,15 @@ def load_data(backtest_config):
                     
                     if backtest_config.STRATEGY_LVL_SL[0] == True:
                         
-                        if int(backtest_config.STRATEGY_LVL_SL[1]) > int(OVERALL_LEG_PNL):
+                        if -(int(backtest_config.STRATEGY_LVL_SL[1])) > int(OVERALL_LEG_PNL):
                             EXIT_OUTER_LOOOP = True
-                            print(f"STRATEGY LVL SL HIT: {backtest_config.STRATEGY_LVL_SL} : OVERALL_PNL: {OVERALL_LEG_PNL}")
+                            print(f"STRATEGY LVL SL HIT: {backtest_config.STRATEGY_LVL_SL} : OVERALL_PNL: {OVERALL_LEG_PNL} Current_Time: {current_time}")
 
                             for leg_key, leg_value in backtest_config.LEGS.items():
+
+                                if any(leg_key in entry for entry in HIT_LEGS):
+                                    continue    
+
                                 TRADE_OPTION = leg_value.get('TRADEOPTION', 'PE')
                                 STRIKE_TYPE = leg_value.get('STRIKE_TYPE','ATM')
 
@@ -159,7 +175,6 @@ def load_data(backtest_config):
                     current_time += timedelta(minutes=1)
 
                 if EXIT_OUTER_LOOOP == True:
-                    
                     continue
         else:
             continue
@@ -260,7 +275,8 @@ def generate_result(FINAL_DATA_SET, LOT_SIZE, GET_QTY, TRADE_OPTION):
                 "exit_price":float(value['Close'].iloc[-1]),
                 "option_type":TRADE_OPTION,
                 "lot_size":int(LOT_SIZE),
-                "pnl":int(GET_QTY) * (float(value['Close'].iloc[-1] - value['Open'].iloc[0]).__round__(2))
+                "pnl":int(GET_QTY) * (float(value['Close'].iloc[-1] - value['Open'].iloc[0]).__round__(2)),
+                "exit_reason":""
             })
                     
         else:
@@ -273,7 +289,8 @@ def generate_result(FINAL_DATA_SET, LOT_SIZE, GET_QTY, TRADE_OPTION):
                 "exit_price":float(var['Close'].iloc[-1]),
                 "option_type":TRADE_OPTION,
                 "lot_size":int(LOT_SIZE),
-                "pnl":int(GET_QTY) * (float(var['Close'].iloc[-1] - var['Open'].iloc[0]).__round__(2))
+                "pnl":int(GET_QTY) * (float(var['Close'].iloc[-1] - var['Open'].iloc[0]).__round__(2)),
+                "exit_reason":""
             })
 
     PNL_RESULT = json.dumps(FINAL_RESULT)
