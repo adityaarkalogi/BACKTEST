@@ -32,41 +32,34 @@ def load_data(backtest_config):
     DATA_RANGE = pd.date_range(FROM_DATE, TO_DATE)
 
     OVERALL_DATA_SET = []
-
     EXIT_OUTER_LOOOP = False
     
-
     for CURRENT_DATE in DATA_RANGE:
-
         HIT_LEGS = []
 
         current_time = datetime.combine(CURRENT_DATE, START_TIME)
-        end_time = datetime.combine(CURRENT_DATE, END_TIME)
-        
+        end_time = datetime.combine(CURRENT_DATE, END_TIME)        
         FILE_PATH = get_data_file_path(CURRENT_DATE, UNDERLYING)
        
-       
         if os.path.exists(FILE_PATH):
-        
             if UNDERLYING == 'BANKNIFTY':
                 DATASET = pd.read_feather(FILE_PATH)
                 
-                # Create WeeklyExpiry for the Underlying 
                 EXPIRY_LST  = create_expiry(DATASET)
                 SORTED_EXP_DATES = sorted(set(datetime.strptime(val, '%d%b%y') for val in EXPIRY_LST))
                 weekly_expiry = (SORTED_EXP_DATES[0]).date()
 
                 DATASET.loc[DATASET['Symbol']=='BANKNIFTY-I', 'WeeklyExpiry'] = weekly_expiry
 
-                # ITERATING OVER DATE-TIME
+
                 ARCHIVE_PNL  = 0
                 while current_time.time() <= end_time.time():
                     LEG_PNL = 0
-                    # Adding leg conditions:
+
                     for leg_key, leg_value in backtest_config.LEGS.items():
 
                         if any(leg_key in entry for entry in HIT_LEGS):
-                            continue 
+                            continue
 
                         TRADE_OPTION = leg_value.get('TRADEOPTION', 'PE')
                         STRIKE_TYPE = leg_value.get('STRIKE_TYPE','ATM')
@@ -74,63 +67,74 @@ def load_data(backtest_config):
                         UNDERLYING_SYMBOL = create_symbol(DATASET, START_TIME, UNDERLYING, TRADE_OPTION, STRIKE_TYPE)
 
                         ENTRY_DATA =  DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)]
-                        
-                        # TO GET THE UNDERLYING SYMBOL DATE FROM FROM-DATE TO TO-DATE. 
+                         
                         DATA_ROW = DATASET.loc[
                                     (DATASET['Symbol'] == UNDERLYING_SYMBOL) & 
                                     (DATASET['Time'] == current_time.time()) 
                                 ]
-                        
-                        # TO CALCULATE LEG PNL
+
                         start_index_row = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)]['Open'].iloc[0]
                         LEG_PNL += (int(DATA_ROW['Close'].iloc[0] - start_index_row))
 
-                        # TO GET TARGET STOPLOSS FOR LEG
                         IS_TARGET = leg_value.get('IS_TARGET', False)
                         TARGET = leg_value.get('TARGET', None)
                         IS_STOPLOSS = leg_value.get('IS_STOPLOSS', False)
                         STOPLOSS = leg_value.get('STOPLOSS', None)
                         
                         is_target_hit, is_stoploss_hit = check_target_and_stoploss(DATA_ROW, IS_TARGET, TARGET, IS_STOPLOSS, STOPLOSS, ENTRY_DATA)
-                        if is_target_hit:
+
+                        if is_target_hit or is_stoploss_hit or current_time.time() == end_time.time():
+                            FINAL_DATA = get_final_data(START_TIME, current_time, UNDERLYING_SYMBOL, DATASET)
+
+                            if is_target_hit or is_stoploss_hit:
+                                HIT_LEGS.append({leg_key: FINAL_DATA})
+                                ARCHIVE_PNL += LEG_PNL
                             
-                            start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
-                            end_idx = DATASET.loc[(DATASET["Symbol"] == UNDERLYING_SYMBOL) & (DATASET["Time"] == current_time.time())].index
+                            OVERALL_DATA_SET.append({leg_key: FINAL_DATA} if (is_target_hit or is_stoploss_hit) else FINAL_DATA)
 
-                            FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
-                            HIT_LEGS.append({leg_key: FINAL_DATA})
-                            OVERALL_DATA_SET.append({leg_key: FINAL_DATA}) 
-
-                            ARCHIVE_PNL += LEG_PNL                       
-
-                        elif is_stoploss_hit:
                             
-                            start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
-                            end_idx = DATASET.loc[(DATASET["Symbol"] == UNDERLYING_SYMBOL) & (DATASET["Time"] == current_time.time())].index
 
-                            FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
-                            HIT_LEGS.append({leg_key: FINAL_DATA})
-                            OVERALL_DATA_SET.append({leg_key: FINAL_DATA}) 
+                        # if is_target_hit:
+                        #     print(f"target hit {leg_key} : {CURRENT_DATE}")
+                        #     # FINAL_DATA = get_final_data(START_TIME, current_time, UNDERLYING_SYMBOL, DATASET)
+                        #     start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
+                        #     end_idx = DATASET.loc[(DATASET["Symbol"] == UNDERLYING_SYMBOL) & (DATASET["Time"] == current_time.time())].index
 
-                            ARCHIVE_PNL += LEG_PNL
+                        #     FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
 
-                        elif current_time.time() == end_time.time():
-                            start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
-                            end_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == current_time.time())].index
+                        #     HIT_LEGS.append({leg_key: FINAL_DATA})
+                        #     OVERALL_DATA_SET.append({leg_key: FINAL_DATA}) 
 
-                            FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
-                            OVERALL_DATA_SET.append(FINAL_DATA)
+                        #     ARCHIVE_PNL += LEG_PNL                       
 
-                            ARCHIVE_PNL += LEG_PNL
+                        # elif is_stoploss_hit:
+                        #     print(f"stoploss hit : {leg_key} : {CURRENT_DATE}")
+                        #     start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
+                        #     end_idx = DATASET.loc[(DATASET["Symbol"] == UNDERLYING_SYMBOL) & (DATASET["Time"] == current_time.time())].index
+
+                        #     FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
+                        #     HIT_LEGS.append({leg_key: FINAL_DATA})
+                        #     OVERALL_DATA_SET.append({leg_key: FINAL_DATA}) 
+
+                        #     ARCHIVE_PNL += LEG_PNL
+
+                        # elif current_time.time() == end_time.time():
+                        #     print(f"current time == end time : {leg_key} : {CURRENT_DATE}")
+                        #     start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
+                        #     end_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == current_time.time())].index
+
+                        #     FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
+                        #     OVERALL_DATA_SET.append(FINAL_DATA)
                     
                     OVERALL_LEG_PNL = LEG_PNL * get_lot_number(UNDERLYING, backtest_config.LOT_SIZE)
+
                     OVERALL_LEG_PNL += ARCHIVE_PNL * get_lot_number(UNDERLYING, backtest_config.LOT_SIZE)
                     
                     if backtest_config.STRATEGY_LVL_TARGET[0] == True:
                         
                         if int(backtest_config.STRATEGY_LVL_TARGET[1]) < int(OVERALL_LEG_PNL):
                             EXIT_OUTER_LOOOP = True
-                            print(f"STRATEGY LVL TARGET HIT: {backtest_config.STRATEGY_LVL_TARGET} : OVERALL_PNL: {OVERALL_LEG_PNL}")
+                            print(f"STRATEGY LVL TARGET HIT: {backtest_config.STRATEGY_LVL_TARGET} : OVERALL_PNL: {OVERALL_LEG_PNL} : {leg_key}")
 
                             for leg_key, leg_value in backtest_config.LEGS.items():
 
@@ -153,7 +157,7 @@ def load_data(backtest_config):
                         
                         if -(int(backtest_config.STRATEGY_LVL_SL[1])) > int(OVERALL_LEG_PNL):
                             EXIT_OUTER_LOOOP = True
-                            print(f"STRATEGY LVL SL HIT: {backtest_config.STRATEGY_LVL_SL} : OVERALL_PNL: {OVERALL_LEG_PNL} Current_Time: {current_time}")
+                            print(f"STRATEGY LVL SL HIT: {backtest_config.STRATEGY_LVL_SL} : OVERALL_PNL: {OVERALL_LEG_PNL} Current_Time: {current_time} : {leg_key}")
 
                             for leg_key, leg_value in backtest_config.LEGS.items():
 
@@ -173,12 +177,11 @@ def load_data(backtest_config):
                             break
 
                     current_time += timedelta(minutes=1)
-
                 if EXIT_OUTER_LOOOP == True:
                     continue
         else:
             continue
-    
+
     
     return OVERALL_DATA_SET
 
@@ -221,7 +224,7 @@ def create_expiry(DATA_SET):
 
     return EXPRIY_LST
 
-# CREATE SYMBOL AS PER THE TIME AND EXPIRY
+
 def create_symbol(DATA_SET, START_TIME, UNDERLYING, TRADE_OPTION, STRIKE_TYPE):
     UNDERLYING = 'BANKNIFTY'
     DATA_SET = pd.DataFrame(DATA_SET)
@@ -241,7 +244,6 @@ def create_symbol(DATA_SET, START_TIME, UNDERLYING, TRADE_OPTION, STRIKE_TYPE):
     return UNDERLYING_SYMBOL
     
 
-# ROUND OF THE VALUE AS PER THE UNDERLYING
 def round_off(STRIKE_PRICE, UNDERLYING):
     if isinstance(STRIKE_PRICE, pd.Series):
         STRIKE_PRICE = STRIKE_PRICE.iloc[0]
@@ -365,7 +367,6 @@ def strike_type(STRIKE_TYPE, ROUND_OFF_VALUE, UNDERLYING, TRADE_OPTION):
     return STRIKE_PRICE
 
 
-# CODE REFACTORING
 
 def parse_date(date_str: str):
     """ Parse date string to Date time object. """
@@ -379,6 +380,7 @@ def parse_time(time_str: str):
     return datetime.strptime(time_str,'%H:%M').time()
 
 def get_data_file_path(current_date: date, underlying: str) -> str:
+
     """ Generate file path for the given date """
 
     FORMATTED_DATE = current_date.strftime('%d%m%Y')
@@ -391,3 +393,13 @@ def get_data_file_path(current_date: date, underlying: str) -> str:
         underlying,
         f"{UnderlyingDataFormat.BANKNIFTY.value}{FORMATTED_DATE}.feather"
     )
+
+def get_final_data(start_time: time, current_time: time, underlying_symbol: str, DATASET: pd.DataFrame) -> pd.DataFrame:
+
+    """ Get the dataset as per symbol, date and time. """
+
+    start_idx = DATASET[(DATASET['Symbol'] == underlying_symbol) & (DATASET['Time'] == start_time)].index
+    end_idx   = DATASET.loc[(DATASET["Symbol"] == underlying_symbol) & (DATASET["Time"] == current_time.time())].index
+
+    return DATASET.iloc[start_idx.item():end_idx.item()+1]
+
