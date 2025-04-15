@@ -45,14 +45,9 @@ def load_data(backtest_config):
             if UNDERLYING == 'BANKNIFTY':
                 DATASET = pd.read_feather(FILE_PATH)
                 
-                EXPIRY_LST  = create_expiry(DATASET)
-                SORTED_EXP_DATES = sorted(set(datetime.strptime(val, '%d%b%y') for val in EXPIRY_LST))
-                weekly_expiry = (SORTED_EXP_DATES[0]).date()
+                DATASET = create_weekly_expiry(DATASET)
 
-                DATASET.loc[DATASET['Symbol']=='BANKNIFTY-I', 'WeeklyExpiry'] = weekly_expiry
-
-
-                ARCHIVE_PNL  = 0
+                ARCHIVE_PNL = 0
                 while current_time.time() <= end_time.time():
                     LEG_PNL = 0
 
@@ -91,41 +86,7 @@ def load_data(backtest_config):
                                 ARCHIVE_PNL += LEG_PNL
                             
                             OVERALL_DATA_SET.append({leg_key: FINAL_DATA} if (is_target_hit or is_stoploss_hit) else FINAL_DATA)
-
-                            
-
-                        # if is_target_hit:
-                        #     print(f"target hit {leg_key} : {CURRENT_DATE}")
-                        #     # FINAL_DATA = get_final_data(START_TIME, current_time, UNDERLYING_SYMBOL, DATASET)
-                        #     start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
-                        #     end_idx = DATASET.loc[(DATASET["Symbol"] == UNDERLYING_SYMBOL) & (DATASET["Time"] == current_time.time())].index
-
-                        #     FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
-
-                        #     HIT_LEGS.append({leg_key: FINAL_DATA})
-                        #     OVERALL_DATA_SET.append({leg_key: FINAL_DATA}) 
-
-                        #     ARCHIVE_PNL += LEG_PNL                       
-
-                        # elif is_stoploss_hit:
-                        #     print(f"stoploss hit : {leg_key} : {CURRENT_DATE}")
-                        #     start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
-                        #     end_idx = DATASET.loc[(DATASET["Symbol"] == UNDERLYING_SYMBOL) & (DATASET["Time"] == current_time.time())].index
-
-                        #     FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
-                        #     HIT_LEGS.append({leg_key: FINAL_DATA})
-                        #     OVERALL_DATA_SET.append({leg_key: FINAL_DATA}) 
-
-                        #     ARCHIVE_PNL += LEG_PNL
-
-                        # elif current_time.time() == end_time.time():
-                        #     print(f"current time == end time : {leg_key} : {CURRENT_DATE}")
-                        #     start_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == START_TIME)].index
-                        #     end_idx = DATASET[(DATASET['Symbol'] == UNDERLYING_SYMBOL) & (DATASET['Time'] == current_time.time())].index
-
-                        #     FINAL_DATA = DATASET.iloc[start_idx.item():end_idx.item()+1]
-                        #     OVERALL_DATA_SET.append(FINAL_DATA)
-                    
+ 
                     OVERALL_LEG_PNL = LEG_PNL * get_lot_number(UNDERLYING, backtest_config.LOT_SIZE)
 
                     OVERALL_LEG_PNL += ARCHIVE_PNL * get_lot_number(UNDERLYING, backtest_config.LOT_SIZE)
@@ -182,7 +143,6 @@ def load_data(backtest_config):
         else:
             continue
 
-    
     return OVERALL_DATA_SET
 
 def check_holiday(HOLIDAY_YEAR, GIVEN_DATE):
@@ -202,26 +162,12 @@ def check_expiry(TRADING_SYMBOL):
     ...
 
 
-def create_expiry(DATA_SET):
-   
-    EXPRIY_LST = []
-
-    DISTINCT_SYMBOLS = pd.Series(DATA_SET['Symbol']).unique()
-    
-    for items in DISTINCT_SYMBOLS:
-        if items == 'BANKNIFTY-I' or items == 'BANKNIFTY-II' or items == "BANKNIFTY-III":
-            continue
-
-        else:
-            MATCH_DATA = re.search(r'\d{2}[A-Za-z]{3}\d{2}', items)
-
-            if MATCH_DATA:
-                EXPIRY_DATES = MATCH_DATA.group(0)
-                EXPRIY_LST.append(EXPIRY_DATES)
-
-            else:
-                print(None)
-
+def create_expiry(DATA_SET) -> list:
+    EXPRIY_LST = [
+        match.group(0) for symbol in pd.Series(DATA_SET['Symbol']).unique()
+        if symbol not in ['BANKNIFTY-I', 'BANKNIFTY-II', 'BANKNIFTY-III']
+        if (match := re.search(r'\d{2}[A-Za-z]{3}\d{2}', symbol)) is not None
+    ]
     return EXPRIY_LST
 
 
@@ -403,3 +349,16 @@ def get_final_data(start_time: time, current_time: time, underlying_symbol: str,
 
     return DATASET.iloc[start_idx.item():end_idx.item()+1]
 
+def create_weekly_expiry(dataset : pd.DataFrame) -> pd.DataFrame:
+
+    """ To Create Weekly Expiry Inside The Dataset """
+
+    EXPIRY_LST  = create_expiry(dataset)
+    print(f"length of expiry list :{len(EXPIRY_LST)}")
+
+    SORTED_EXP_DATES = sorted(set(datetime.strptime(val, '%d%b%y') for val in EXPIRY_LST))
+    weekly_expiry = (SORTED_EXP_DATES[0]).date()
+
+    dataset.loc[dataset['Symbol']=='BANKNIFTY-I', 'WeeklyExpiry'] = weekly_expiry
+
+    return dataset

@@ -1,5 +1,7 @@
 import backtest
 from commons.models import BACKTESTER
+from time import time
+
 
 config = BACKTESTER(
     FROM_DATE = '2023-04-09',
@@ -34,8 +36,10 @@ config = BACKTESTER(
     STRATEGY_LVL_SL = [True, 1000]
 )
 
+start_time = time()
 backtest_result = backtest.run_backtest(config)
-
+end_time = time() - start_time
+print(end_time)
 print(backtest_result)
 
 
